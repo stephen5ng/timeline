@@ -58,7 +58,7 @@ def prerender_textrect(string: str, blitter: Blitter, font: pygame.freetype.Font
     text_color: pygame.Color, rg: FontRectGetter,
     rect_only=False) -> tuple[pygame.Rect, tuple[str, ...], tuple[int, ...]]:
     final_lines = []
-    last_rect = pygame.Rect()
+    last_rect = None
     requested_lines = string.splitlines()
 
     # Create a series of lines that will fit on the provided

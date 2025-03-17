@@ -1,4 +1,5 @@
 aiomqtt
 pillow
 pygame-ce
+pyvidplayer2
 RGBMatrixEmulator
