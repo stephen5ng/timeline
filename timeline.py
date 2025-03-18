@@ -1,166 +1,188 @@
 #!/usr/bin/env python
 
-import aiomqtt
+# Standard library imports
 import asyncio
-from functools import reduce
 import math
 import os
-from PIL import Image, ImageDraw
 import platform
+import re
+import string
+import sys
+from functools import reduce
+from typing import Callable, List, Tuple, Optional
+
+# Third-party imports
+import aiomqtt
+from PIL import Image, ImageDraw
 import pygame
 import pygame.gfxdraw
 from pygame import Color
 import pygame.freetype
 from pyvidplayer2 import Video
-import re
-import string
-import sys
 import textrect
-from typing import Callable
 
+# Local imports
 from pygameasync import Clock
 from get_key import get_key
 import my_inputs
 import hub75
 
-SCALING_FACTOR = 9
-SCREEN_WIDTH = 128
-SCREEN_HEIGHT = 128
+# Constants
+SCALING_FACTOR: int = 9
+SCREEN_WIDTH: int = 128
+SCREEN_HEIGHT: int = 128
+MQTT_SERVER: str = os.environ.get("MQTT_SERVER", "localhost")
+FPS: int = 30
 
-MQTT_SERVER = os.environ.get("MQTT_SERVER", "localhost")
+class TimelineGame:
+    def __init__(self):
+        self.quit_app: bool = False
+        self.video: Optional[Video] = None
+        self.lines: List[str] = []
+        self.clock: Optional[Clock] = None
+        self.display_surface: Optional[pygame.Surface] = None
+        self.screen: Optional[pygame.Surface] = None
+        self.font_guess: Optional[pygame.freetype.Font] = None
+        self.font_small: Optional[pygame.freetype.Font] = None
+        self.textrecter: Optional[textrect.TextRectRenderer] = None
+        self.letters: str = ""
+        self.guess: str = ""
+        self.current_position: int = 0
+        self.last_direction: int = 0
+        self.start_movement: int = 0
+        self.angle: int = 0
 
-def load_text_file_to_array(filepath):
-    with open(filepath, 'r', encoding='utf-8') as file:  # Use utf-8 encoding for broader character support
-        lines = file.readlines()  # Read all lines into a list
-        lines = [line.strip().upper() for line in lines]
-    return lines
+    def load_text_file_to_array(self, filepath: str) -> List[str]:
+        """Load text file and convert lines to uppercase."""
+        with open(filepath, 'r', encoding='utf-8') as file:
+            return [line.strip().upper() for line in file.readlines()]
 
-def read_lines_from_file(filepath):
-    with open(filepath, 'r') as file:  # 'r' for reading
-        lines = file.readlines()
-        lines = [line.strip() for line in lines]
-        return lines
+    def read_lines_from_file(self, filepath: str) -> List[str]:
+        """Read lines from file and strip whitespace."""
+        with open(filepath, 'r') as file:
+            return [line.strip() for line in file.readlines()]
 
-quit_app = False
+    def draw_pie(self, surface: pygame.Surface, color: Color, center: Tuple[int, int], 
+                 radius: int, start_angle: float, end_angle: float) -> None:
+        """Draw a pie slice on the surface."""
+        large_size = (radius*8, radius*8)
+        pil_image = Image.new("RGBA", large_size)
+        draw = ImageDraw.Draw(pil_image)
+        draw.pieslice([(0, 0), large_size], start=start_angle, end=end_angle, fill=tuple(color))
+        pil_image = pil_image.resize((radius*2, radius*2), resample=Image.Resampling.LANCZOS)
 
-def draw_pie(surface, color, center, radius, start_angle, end_angle):
-    large_size = (radius*8, radius*8)
-    print(f"center {center}")
-    pil_image = Image.new("RGBA", large_size)
-    draw = ImageDraw.Draw(pil_image)
-    draw.pieslice([(0, 0), large_size], start=start_angle, end=end_angle, fill=tuple(color))
-    pil_image = pil_image.resize((radius*2, radius*2), resample=Image.Resampling.LANCZOS)
+        data = pil_image.tobytes()
+        s = pygame.image.fromstring(data, pil_image.size, pil_image.mode).convert_alpha()
+        surface.blit(s, center)
 
-    data = pil_image.tobytes()
-    s = pygame.image.fromstring(data, pil_image.size, pil_image.mode).convert_alpha()
-    # s.set_alpha(color.a)
-    surface.blit(s, center)
-
-async def trigger_events_from_mqtt(subscribe_client: aiomqtt.Client):
-    global quit_app
-    async for message in subscribe_client.messages:
-        if message.topic.matches("password_game/quit"):
-            quit_app = True
-
-async def run_game():
-    global quit_app
-    vid = Video("images/dinosaursRko0LigjmAQ_trimmed_128.mov", use_pygame_audio=True)
-    print(f"size: {vid.current_size}")
-    lines = read_lines_from_file("timeline.txt")
-
-    clock = Clock()
-    pygame.freetype.init()
-    display_surface = pygame.display.set_mode(
-       (SCREEN_WIDTH*SCALING_FACTOR, SCREEN_HEIGHT*SCALING_FACTOR))
-
-    font_guess = pygame.freetype.Font("raize-13.pcf", 13)
-    font_small = pygame.freetype.Font("scientifica-11.bdf", 11)
-    textrecter = textrect.TextRectRenderer(font_small,
-        pygame.Rect(0, 0, 128, 64), Color("green"))
-    screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), flags=pygame.SRCALPHA)
-    screen = screen.convert_alpha()
-    letters = ""
-    guess = ""
-    current_position = 0
-    last_direction = 0
-    start_movement = 0
-    angle = 0
-    while True:
-        angle += 1
-        angle = angle % 360
-        if quit_app:
-            return
-        screen.fill((0, 0, 0))
-        if not vid.active:
-            vid.restart()
-        vid.draw(screen, (0, 0), force_draw=True)
-        smaller = 10
-        draw_pie(screen, Color(0, 80, 0, 30), (32+smaller, 32+smaller), 32-smaller, 270, angle/10)
-        smaller = 20
-        draw_pie(screen, Color(80, 80, 0, 100), (32+smaller, 32+smaller), 32-smaller, 270, angle/40)
-        draw_pie(screen, Color(80, 0, 0, 50), (32, 32), 32, 270, angle)
-
-        show_cursor = (pygame.time.get_ticks()*2 // 1000) % 2 == 0
-        print_guess = guess + ("_" if show_cursor else " ")
-        current_line = lines[current_position][:60]
-        # print(f"current line: {current_line}")
-        date, description = current_line.split(':')
-        line_date = float(date)
-        disp_date = ""
+    def format_date(self, line_date: float) -> str:
+        """Format the date for display."""
         if line_date < 0:
             if line_date < -1e9:
-                frac_part = -line_date / 1e9
-                disp_date = f"{frac_part} bya"
+                return f"{-line_date / 1e9} bya"
             elif line_date < -1e6:
-                frac_part = -line_date / 1e6
-                disp_date = f"{frac_part} mya"
-            else:
-                disp_date = "{:.0f}".format(int(line_date))
-        else:
-            disp_date = int(line_date)
-            print(f"{disp_date} {line_date}")
-        rendered = textrecter.render(f"{disp_date}: {description}")
-        screen.blit(rendered, (0, 3))
+                return f"{-line_date / 1e6} mya"
+            return f"{int(line_date)}"
+        return str(int(line_date))
 
-        pygame.draw.line(screen, Color("orange"), (0, 0), (128, 0))
-        pygame.draw.circle(screen, Color("red"), (current_position+90, 1), 1)
+    def handle_key_input(self, key: str, keydown: bool) -> None:
+        """Handle keyboard input."""
+        if keydown:
+            self.start_movement = pygame.time.get_ticks()
+            self.last_direction = 1 if key == "right" else -1 if key == "left" else 0
+        elif not keydown:
+            self.last_direction = 0
 
-        for key, keydown in get_key():
-            print(f"{key}, {keydown}")
-            if keydown:
-                start_movement = pygame.time.get_ticks()
-                if key == "right":
-                    last_direction = 1
-                elif key == "left":
-                    last_direction = -1
-            elif not keydown:
-                last_direction = 0
-            if key == "quit":
-                return
-            elif key == "escape":
-                guess = ""
-            elif key == "backspace":
-                guess = guess[:-1]
-            elif len(key) == 1:
-                guess += key
+        if key == "quit":
+            self.quit_app = True
+        elif key == "escape":
+            self.guess = ""
+        elif key == "backspace":
+            self.guess = self.guess[:-1]
+        elif len(key) == 1:
+            self.guess += key
 
-            current_position += last_direction
-            current_position = min(current_position, len(lines)-1)
-            current_position = max(current_position, 0)
-        hub75.update(screen)
-        pygame.transform.scale(screen,
-        display_surface.get_rect().size, dest_surface=display_surface)
-        pygame.display.update()
-        await clock.tick(30)
+        self.current_position = max(0, min(self.current_position + self.last_direction, len(self.lines)-1))
 
-async def main():
+    async def run_game(self) -> None:
+        """Main game loop."""
+        self.video = Video("images/dinosaursRko0LigjmAQ_trimmed_128.mov", use_pygame_audio=True)
+        self.lines = self.read_lines_from_file("timeline.txt")
+        self.clock = Clock()
+        
+        pygame.freetype.init()
+        self.display_surface = pygame.display.set_mode(
+            (SCREEN_WIDTH*SCALING_FACTOR, SCREEN_HEIGHT*SCALING_FACTOR))
+        
+        self.font_guess = pygame.freetype.Font("raize-13.pcf", 13)
+        self.font_small = pygame.freetype.Font("scientifica-11.bdf", 11)
+        self.textrecter = textrect.TextRectRenderer(
+            self.font_small, pygame.Rect(0, 0, 128, 64), Color("green"))
+        
+        self.screen = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), flags=pygame.SRCALPHA)
+        self.screen = self.screen.convert_alpha()
+
+        while not self.quit_app:
+            self.angle = (self.angle + 1) % 360
+            
+            self.screen.fill((0, 0, 0))
+            if not self.video.active:
+                self.video.restart()
+            self.video.draw(self.screen, (0, 0), force_draw=True)
+
+            # Draw pie animations
+            smaller = 10
+            self.draw_pie(self.screen, Color(0, 80, 0, 30), 
+                         (32+smaller, 32+smaller), 32-smaller, 270, self.angle/10)
+            smaller = 20
+            self.draw_pie(self.screen, Color(80, 80, 0, 100), 
+                         (32+smaller, 32+smaller), 32-smaller, 270, self.angle/40)
+            self.draw_pie(self.screen, Color(80, 0, 0, 50), 
+                         (32, 32), 32, 270, self.angle)
+
+            # Draw timeline
+            show_cursor = (pygame.time.get_ticks()*2 // 1000) % 2 == 0
+            print_guess = self.guess + ("_" if show_cursor else " ")
+            current_line = self.lines[self.current_position][:60]
+            date, description = current_line.split(':')
+            line_date = float(date)
+            disp_date = self.format_date(line_date)
+
+            rendered = self.textrecter.render(f"{disp_date}: {description}")
+            self.screen.blit(rendered, (0, 3))
+
+            # Draw timeline indicator
+            pygame.draw.line(self.screen, Color("orange"), (0, 0), (128, 0))
+            pygame.draw.circle(self.screen, Color("red"), (self.current_position+90, 1), 1)
+
+            # Handle input
+            for key, keydown in get_key():
+                self.handle_key_input(key, keydown)
+
+            # Update display
+            hub75.update(self.screen)
+            pygame.transform.scale(self.screen,
+                self.display_surface.get_rect().size, dest_surface=self.display_surface)
+            pygame.display.update()
+            
+            await self.clock.tick(FPS)
+
+async def trigger_events_from_mqtt(subscribe_client: aiomqtt.Client, game: TimelineGame) -> None:
+    """Handle MQTT events."""
+    async for message in subscribe_client.messages:
+        if message.topic.matches("password_game/quit"):
+            game.quit_app = True
+
+async def main() -> None:
+    """Main entry point."""
+    game = TimelineGame()
     async with aiomqtt.Client(MQTT_SERVER) as subscribe_client:
         await subscribe_client.subscribe("#")
         subscribe_task = asyncio.create_task(
-            trigger_events_from_mqtt(subscribe_client),
+            trigger_events_from_mqtt(subscribe_client, game),
             name="mqtt subscribe handler")
 
-        await run_game()
+        await game.run_game()
         subscribe_task.cancel()
         pygame.quit()
 
