@@ -25,7 +25,7 @@ import hub75
 
 SCALING_FACTOR = 9
 SCREEN_WIDTH = 128
-SCREEN_HEIGHT = 96
+SCREEN_HEIGHT = 128
 
 MQTT_SERVER = os.environ.get("MQTT_SERVER", "localhost")
 
@@ -64,7 +64,7 @@ async def trigger_events_from_mqtt(subscribe_client: aiomqtt.Client):
 
 async def run_game():
     global quit_app
-    vid = Video("images/dinosaursRko0LigjmAQ_trimmed_64.mov", use_pygame_audio=True)
+    vid = Video("images/dinosaursRko0LigjmAQ_trimmed_128.mov", use_pygame_audio=True)
     print(f"size: {vid.current_size}")
     lines = read_lines_from_file("timeline.txt")
 
@@ -93,7 +93,7 @@ async def run_game():
         screen.fill((0, 0, 0))
         if not vid.active:
             vid.restart()
-        vid.draw(screen, (32, 32), force_draw=True)
+        vid.draw(screen, (0, 0), force_draw=True)
         smaller = 10
         draw_pie(screen, Color(0, 80, 0, 30), (32+smaller, 32+smaller), 32-smaller, 270, angle/10)
         smaller = 20
