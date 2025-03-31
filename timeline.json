@@ -1,0 +1,19 @@
+[
+    {"date": -14e9, "description": "Big Bang"},
+    {"date": -4.5e9, "description": "Formation of the Earth"},
+    {"date": -4e9, "description": "Life first appears on Earth"},
+    {"date": -1.8e9, "description": "First cells with a nucleus"},
+    {"date": -600e6, "description": "First multicellular animals"},
+    {"date": -480e6, "description": "First fish evolve"},
+    {"date": -230e6, "description": "First dinosaurs evolve", "video": "images/dinosaursRko0LigjmAQ_trimmed_128.mov"},
+    {"date": -200e6, "description": "First mammals evolve"},
+    {"date": -150e6, "description": "First birds evolve"},
+    {"date": -65e6, "description": "Asteroid causes 50% of plants and animals extinct"},
+    {"date": 1792, "description": "James Watt patents the steam engine"},
+    {"date": 1930, "description": "Great Depression", "video": "images/dust_bowl.mov", "source": "https://youtu.be/-J_RbFkv82o"},
+    {"date": 1942, "description": "Archduke Franz Ferdinand assassinated"},
+    {"date": 1945, "description": "World War II ends"},
+    {"date": 1969, "description": "Apollo 11 mission lands on the moon"},
+    {"date": 1989, "description": "Fall of the Berlin Wall"}
+    
+] 

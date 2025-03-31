@@ -9,7 +9,8 @@ import re
 import string
 import sys
 from functools import reduce
-from typing import Callable, List, Tuple, Optional
+from typing import Callable, List, Tuple, Optional, Dict
+import json
 
 # Third-party imports
 import aiomqtt
@@ -34,11 +35,15 @@ SCREEN_HEIGHT: int = 128
 MQTT_SERVER: str = os.environ.get("MQTT_SERVER", "localhost")
 FPS: int = 30
 
+# To convert the video to a smaller size:
+# ffmpeg -i images/dinosaurs.mov -vf "scale=96:96:force_original_aspect_ratio=increase,crop=128:128" \
+# -c:a copy images/dinosaurs_128.mov
+
 class TimelineGame:
     def __init__(self):
         self.quit_app: bool = False
         self.video: Optional[Video] = None
-        self.lines: List[str] = []
+        self.events: List[Dict[str, float | str]] = []
         self.clock: Optional[Clock] = None
         self.display_surface: Optional[pygame.Surface] = None
         self.screen: Optional[pygame.Surface] = None
@@ -51,16 +56,12 @@ class TimelineGame:
         self.last_direction: int = 0
         self.start_movement: int = 0
         self.angle: int = 0
+        self.last_position: int = 0
 
-    def load_text_file_to_array(self, filepath: str) -> List[str]:
-        """Load text file and convert lines to uppercase."""
-        with open(filepath, 'r', encoding='utf-8') as file:
-            return [line.strip().upper() for line in file.readlines()]
-
-    def read_lines_from_file(self, filepath: str) -> List[str]:
-        """Read lines from file and strip whitespace."""
+    def load_timeline_data(self, filepath: str) -> List[Dict[str, float | str]]:
+        """Load timeline data from JSON file."""
         with open(filepath, 'r') as file:
-            return [line.strip() for line in file.readlines()]
+            return json.load(file)
 
     def draw_pie(self, surface: pygame.Surface, color: Color, center: Tuple[int, int], 
                  radius: int, start_angle: float, end_angle: float) -> None:
@@ -72,7 +73,7 @@ class TimelineGame:
         pil_image = pil_image.resize((radius*2, radius*2), resample=Image.Resampling.LANCZOS)
 
         data = pil_image.tobytes()
-        s = pygame.image.fromstring(data, pil_image.size, pil_image.mode).convert_alpha()
+        s = pygame.image.frombytes(data, pil_image.size, pil_image.mode).convert_alpha()
         surface.blit(s, center)
 
     def format_date(self, line_date: float) -> str:
@@ -102,12 +103,12 @@ class TimelineGame:
         elif len(key) == 1:
             self.guess += key
 
-        self.current_position = max(0, min(self.current_position + self.last_direction, len(self.lines)-1))
+        self.current_position = max(0, min(self.current_position + self.last_direction, len(self.events)-1))
 
     async def run_game(self) -> None:
         """Main game loop."""
-        self.video = Video("images/dinosaursRko0LigjmAQ_trimmed_128.mov", use_pygame_audio=True)
-        self.lines = self.read_lines_from_file("timeline.txt")
+        self.events = self.load_timeline_data("timeline.json")
+        self.video = None
         self.clock = Clock()
         
         pygame.freetype.init()
@@ -126,9 +127,19 @@ class TimelineGame:
             self.angle = (self.angle + 1) % 360
             
             self.screen.fill((0, 0, 0))
-            if not self.video.active:
-                self.video.restart()
-            self.video.draw(self.screen, (0, 0), force_draw=True)
+            if self.video:
+                if not self.video.active:
+                    self.video.restart()
+                self.video.draw(self.screen, (0, 0), force_draw=True)
+
+            # Update video when position changes
+            if self.current_position != self.last_position:
+                current_event = self.events[self.current_position]
+                if "video" in current_event:
+                    self.video = Video(current_event["video"], use_pygame_audio=True)
+                else:
+                    self.video = None
+                self.last_position = self.current_position
 
             # Draw pie animations
             smaller = 10
@@ -143,10 +154,10 @@ class TimelineGame:
             # Draw timeline
             show_cursor = (pygame.time.get_ticks()*2 // 1000) % 2 == 0
             print_guess = self.guess + ("_" if show_cursor else " ")
-            current_line = self.lines[self.current_position][:60]
-            date, description = current_line.split(':')
-            line_date = float(date)
-            disp_date = self.format_date(line_date)
+            current_event = self.events[self.current_position]
+            date = current_event["date"]
+            description = current_event["description"]
+            disp_date = self.format_date(date)
 
             rendered = self.textrecter.render(f"{disp_date}: {description}")
             self.screen.blit(rendered, (0, 3))
