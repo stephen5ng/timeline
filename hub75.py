@@ -32,7 +32,7 @@ def create_rgbmatrix() -> Union["RGBMatrixEmulator.RGBMatrix", "rgbmatrix.RGBMat
     options.row_address_type = 0
 
     if platform.system() == "Darwin":
-        options.rows = 96
+        options.rows = 128
         options.cols = 128
         options.chain_length = 1
         options.parallel = 1
