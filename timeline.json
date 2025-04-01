@@ -10,10 +10,11 @@
     {"date": -150e6, "description": "First birds evolve"},
     {"date": -65e6, "description": "Asteroid causes 50% of plants and animals extinct"},
     {"date": 1792, "description": "James Watt patents the steam engine"},
+    {"date": 1914, "description": "Last passenger pigeon dies", "video": "images/passengerpigeon.mov", "source": "https://youtu.be/-J_RbFkv82o"},
     {"date": 1930, "description": "Great Depression", "video": "images/dust_bowl.mov", "source": "https://youtu.be/-J_RbFkv82o"},
     {"date": 1942, "description": "Archduke Franz Ferdinand assassinated"},
     {"date": 1945, "description": "World War II ends"},
     {"date": 1969, "description": "Apollo 11 mission lands on the moon"},
-    {"date": 1989, "description": "Fall of the Berlin Wall"}
-    
+    {"date": 1989, "description": "Fall of the Berlin Wall"},
+    {"date": 2002, "description": "Larsen B ice shelf collapses", "video": "images/larsen_b.mov", "source": "https://www.youtube.com/watch?v=H2a3Oemo1e4"}
 ] 
